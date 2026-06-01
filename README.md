@@ -1,94 +1,155 @@
-## Установка
+# Система внутриигровых покупок (MVP backend)
+
+Backend-сервис для регистрации пользователей, пополнения кошелька, покупки внутриигровых товаров, просмотра инвентаря и оформления возвратов.
+
+Стек: `Python`, `FastAPI`, `Pydantic`, `SQLAlchemy`, `Alembic`, `PostgreSQL`, `Redis`, `Docker`, `Docker Compose`, `Pytest`, `Uvicorn`.
+
+## 1) Готовые артефакты
+
+- `Dockerfile`
+- `docker-compose.yml` (`app + postgres + redis`)
+- `.env.example`
+- `alembic/` (миграции)
+- `tests/` (API + rollback + test DB fixtures)
+- `docs/api_contract_mvp.md`
+
+## 2) Быстрый запуск
 
 ```bash
-pip install -r requirements.txt
+cp .env.example .env
+docker compose build
+docker compose up -d
 ```
 
-## Подготовка Redis
+API: `http://localhost:8000`
 
-Для выполнения чек-листа по кешированию Redis должен быть запущен.
+Swagger: `http://localhost:8000/docs`
 
-Пример через Docker:
+## 3) Команды сдачи (build/up/migrate/test/down)
 
 ```bash
-docker run --name fastapi-redis -p 6379:6379 -d redis:7-alpine
+# build
+docker compose build
+
+# up
+docker compose up -d
+
+# migrate
+docker compose exec app alembic upgrade head
+
+# test
+docker compose exec app pytest -q
+
+# down
+docker compose down -v
 ```
 
-По умолчанию приложение использует `redis://127.0.0.1:6379/0`.
-При необходимости можно переопределить переменной `REDIS_URL`.
+## 4) Миграции
 
-## Запуск
+Применить:
 
 ```bash
-uvicorn main:app --reload
+docker compose exec app alembic upgrade head
 ```
 
-Документация Swagger: `http://127.0.0.1:8000/docs`
+Откатить на 1 ревизию:
 
-## Авторизация
-
-- `POST /auth/register` - регистрация пользователя.
-- `POST /auth/login` - вход пользователя.
-- `POST /auth/logout` - выход пользователя.
-
-Для всех защищенных эндпоинтов передавайте заголовок:
-
-`X-User-Id: <user_id>`
-
-## Эндпоинты `items` (БД + фоновые задачи)
-
-- `POST /items/` - создать запись.
-- `GET /items/` - получить список записей (кешируется в Redis).
-- `GET /items/{item_id}` - получить запись по ID (кешируется в Redis).
-- `PUT /items/{item_id}` - обновить запись.
-- `DELETE /items/{item_id}` - удалить одну запись.
-- `POST /items/import-csv` - фоновая загрузка данных из CSV.
-- `POST /items/bulk-delete` - фоновое удаление записей по списку ID.
-- `GET /items/tasks/{task_id}` - статус фоновой задачи.
-
-### Формат CSV для импорта
-
-Обязательные колонки: `name,category,price,quantity`
-
-Пример:
-
-```csv
-name,category,price,quantity
-Milk,Dairy,120.5,7
-Bread,Bakery,65,12
+```bash
+docker compose exec app alembic downgrade -1
 ```
 
-Тело запроса на `POST /items/import-csv`:
+## 5) Тесты
 
-```json
-{
-  "file_path": "/absolute/or/relative/path/to/items.csv"
-}
+Запуск:
+
+```bash
+docker compose exec app pytest -q
 ```
 
-Тело запроса на `POST /items/bulk-delete`:
+Покрытие:
 
-```json
-{
-  "ids": [1, 2, 3]
-}
+```bash
+docker compose exec app pytest --cov=app --cov-report=term-missing --cov-report=xml
 ```
 
-## Эндпоинт вычислений
+Порог, например 90%:
 
-`POST /calculate/` доступен только авторизованным пользователям и кешируется в Redis.
-
-Тело запроса:
-
-```json
-{
-  "numbers": [5, 3, 10],
-  "delays": [1, 2, 0.5]
-}
+```bash
+docker compose exec app pytest --cov=app --cov-fail-under=90
 ```
 
-## Переменные окружения
+## 6) Примеры запросов
 
-- `DATABASE_URL` (по умолчанию: `sqlite+aiosqlite:///./app.db`)
-- `REDIS_URL` (по умолчанию: `redis://127.0.0.1:6379/0`)
-- `CACHE_TTL_SECONDS` (по умолчанию: `120`)
+Регистрация:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "player@example.com",
+    "username": "player_1",
+    "password": "StrongPass123"
+  }'
+```
+
+Логин:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "player@example.com",
+    "password": "StrongPass123"
+  }'
+```
+
+Пополнение кошелька:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/wallet/topup \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": "1000.00",
+    "reason": "test topup"
+  }'
+```
+
+Покупка:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/purchases \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Idempotency-Key: 11111111-1111-1111-1111-111111111111" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "item_id": 1,
+    "quantity": 1
+  }'
+```
+
+Возврат:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/refunds \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "purchase_id": 1,
+    "reason": "mistaken purchase"
+  }'
+```
+
+## 7) Checklist соответствия критериям
+
+- [x] Используется требуемый стек (`FastAPI`, `PostgreSQL`, `Redis`, `Alembic`, `Pytest`, `Docker Compose`).
+- [x] Код разбит по слоям: `routers/`, `services/`, `schemas/`, `models/`, `core/`.
+- [x] Реализованы `auth` и `role-based` ограничения для admin-эндпоинтов.
+- [x] Валидация входных данных и единый формат ошибок API.
+- [x] Идемпотентность покупки и бизнес-правила возврата.
+- [x] Redis интеграция: `purchase.created`, TTL reserve, degraded mode.
+- [x] Миграции Alembic и seed-ревизия присутствуют.
+- [x] Проект поднимается через `docker-compose`.
+- [x] Функциональные тесты по ключевым endpoint + тесты rollback.
+- [~] Целевой порог покрытия `~90%` проверяется командой `pytest --cov ... --cov-fail-under=90`.
+- [x] README содержит запуск, миграции, тесты и примеры запросов.
