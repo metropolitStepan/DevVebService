@@ -72,7 +72,6 @@ docker compose exec app pytest -q
 docker compose exec app pytest --cov=app --cov-report=term-missing --cov-report=xml
 ```
 
-Порог, например 90%:
 
 ```bash
 docker compose exec app pytest --cov=app --cov-fail-under=90
@@ -139,17 +138,3 @@ curl -X POST http://localhost:8000/api/v1/refunds \
     "reason": "mistaken purchase"
   }'
 ```
-
-## 7) Checklist соответствия критериям
-
-- [x] Используется требуемый стек (`FastAPI`, `PostgreSQL`, `Redis`, `Alembic`, `Pytest`, `Docker Compose`).
-- [x] Код разбит по слоям: `routers/`, `services/`, `schemas/`, `models/`, `core/`.
-- [x] Реализованы `auth` и `role-based` ограничения для admin-эндпоинтов.
-- [x] Валидация входных данных и единый формат ошибок API.
-- [x] Идемпотентность покупки и бизнес-правила возврата.
-- [x] Redis интеграция: `purchase.created`, TTL reserve, degraded mode.
-- [x] Миграции Alembic и seed-ревизия присутствуют.
-- [x] Проект поднимается через `docker-compose`.
-- [x] Функциональные тесты по ключевым endpoint + тесты rollback.
-- [~] Целевой порог покрытия `~90%` проверяется командой `pytest --cov ... --cov-fail-under=90`.
-- [x] README содержит запуск, миграции, тесты и примеры запросов.
